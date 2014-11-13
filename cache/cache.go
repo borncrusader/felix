@@ -52,7 +52,7 @@ func cacheRetrieve(fi os.FileInfo) ([]byte, bool) {
 	if fi_cache.ModTime().Equal(fi.ModTime()) &&
 		fi_cache.Size() == fi.Size() &&
 		fi_cache.Mode() == fi.Mode() {
-		log.Printf("Cache Hit: '%s'; Size: %d; cacheSize: %d\n", fi.Name(),
+		log.Printf("Cache Hit: '%s'; Size: %d; CacheSize: %d\n", fi.Name(),
 			fi.Size(), cacheSize)
 		cacheList.MoveToFront(e)
 		return stream, ok
