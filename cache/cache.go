@@ -6,8 +6,8 @@ import (
 	"os"
 )
 
-/* total size of the cache */
-const cacheLimit int64 = 67108864
+/* total capacity of the cache */
+const cacheCapacity int64 = 67108864
 
 /* total size of the cache */
 var cacheSize int64 = 0
@@ -23,7 +23,8 @@ func cacheAdd(fi os.FileInfo, buf []byte) {
 	cacheFiles[fi.Name()] = buf
 	cacheList.PushFront(fi)
 
-	log.Printf("Cache Add: '%s', Size: %d\n", fi.Name(), fi.Size())
+	log.Printf("Cache Add: '%s'; Size: %d; CacheSize: %d\n", fi.Name(),
+		fi.Size(), cacheSize)
 }
 
 func cacheRetrieve(fi os.FileInfo) ([]byte, bool) {
@@ -31,7 +32,8 @@ func cacheRetrieve(fi os.FileInfo) ([]byte, bool) {
 
 	if !ok {
 		/* cache miss */
-		log.Printf("Cache Miss: '%s', Size: %d\n", fi.Name(), fi.Size())
+		log.Printf("Cache Miss: '%s'; Size: %d; CacheSize: %d\n", fi.Name(),
+			fi.Size(), cacheSize)
 		return stream, ok
 	}
 
@@ -50,14 +52,15 @@ func cacheRetrieve(fi os.FileInfo) ([]byte, bool) {
 	if fi_cache.ModTime().Equal(fi.ModTime()) &&
 		fi_cache.Size() == fi.Size() &&
 		fi_cache.Mode() == fi.Mode() {
-		log.Printf("Cache Hit: '%s', Size: %d\n", fi.Name(), fi.Size())
+		log.Printf("Cache Hit: '%s'; Size: %d; cacheSize: %d\n", fi.Name(),
+			fi.Size(), cacheSize)
 		cacheList.MoveToFront(e)
 		return stream, ok
 	}
 
 	/* the file has changed under us! not reliable to have it in cache */
-	log.Printf("Cache Evict: '%s', Size: %d; Reason: File changed\n", fi.Name(),
-		fi.Size())
+	log.Printf("Cache Evict: '%s'; Size: %d; Reason: File changed; CacheSize: %d\n",
+		fi.Name(), fi.Size(), cacheSize)
 
 	delete(cacheFiles, fi.Name())
 	cacheList.Remove(e)
@@ -66,31 +69,34 @@ func cacheRetrieve(fi os.FileInfo) ([]byte, bool) {
 }
 
 func cacheEvictLRU(fi os.FileInfo) {
+	e := cacheList.Back()
 
-	var sizeFreed int64 = 0
+	for e != nil {
+		if (cacheCapacity - cacheSize) >= fi.Size() {
+			break
+		}
 
-	for e := cacheList.Back(); e != nil || sizeFreed < fi.Size(); {
 		prev := e.Prev()
 
 		fi_cache := e.Value.(os.FileInfo)
 
-		log.Printf("Cache Evict: '%s', Size: %d; Reason: LRU\n",
-			fi_cache.Name(), fi_cache.Size())
+		cacheSize -= fi_cache.Size()
+
+		log.Printf("Cache Evict: '%s'; Size: %d; Reason: LRU; CacheSize: %d\n",
+			fi_cache.Name(), fi_cache.Size(), cacheSize)
 
 		delete(cacheFiles, fi_cache.Name())
 		cacheList.Remove(e)
 
 		e = prev
-
-		sizeFreed += e.Value.(os.FileInfo).Size()
 	}
 }
 
 func RetrieveFile(fi os.FileInfo) ([]byte, error) {
 	/* we cannot handle more than the cache limit */
-	if fi.Size() > cacheLimit {
-		log.Printf("Exceeded Cache Limit: '%s', Size: %d\n", fi.Name(),
-			fi.Size())
+	if fi.Size() > cacheCapacity {
+		log.Printf("Cannot add to cache: '%s'; Size: %d; CacheSize: %d\n",
+			fi.Name(), fi.Size(), cacheSize)
 		return nil, nil
 	}
 
@@ -111,13 +117,13 @@ func RetrieveFile(fi os.FileInfo) ([]byte, error) {
 
 	file.Close()
 
-	if (cacheSize + fi.Size()) <= cacheLimit {
-		/* can add it to cache */
-		cacheAdd(fi, buf)
-	} else {
+	if (cacheSize + fi.Size()) > cacheCapacity {
 		/* need to evict something */
 		cacheEvictLRU(fi)
 	}
+
+	/* can add it to cache */
+	cacheAdd(fi, buf)
 
 	return buf, nil
 }
