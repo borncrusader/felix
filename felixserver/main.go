@@ -108,9 +108,15 @@ func handleClient(conn net.Conn) {
 	}
 
 	/* return file */
-	_, ok := cache.RetrieveFile(fi)
-	if !ok {
-		/* read file and stream to client */
+	stream, err := cache.RetrieveFile(fi)
+	if err != nil {
+		log.Printf("Cannot Retrieve from cache '%s': %s\n", req.Filename,
+			err.Error())
+		return
+	}
+
+	if stream != nil {
+		/* cache couldn't fetch it; read file and stream to client */
 		file, err := os.Open(req.Filename)
 		if err != nil {
 			log.Printf("Cannot Open: '%s': %s\n", req.Filename, err.Error())
@@ -138,5 +144,12 @@ func handleClient(conn net.Conn) {
 		}
 
 		file.Close()
+	} else {
+		/* cache fetched the file; stream it to client */
+		_, err = conn.Write(stream)
+		if err != nil {
+			log.Println("Cannot Write to '%s': %s\n",
+				conn.RemoteAddr().String(), err.Error())
+		}
 	}
 }
