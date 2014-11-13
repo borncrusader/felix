@@ -115,7 +115,7 @@ func handleClient(conn net.Conn) {
 		return
 	}
 
-	if stream != nil {
+	if stream == nil {
 		/* cache couldn't fetch it; read file and stream to client */
 		file, err := os.Open(req.Filename)
 		if err != nil {
